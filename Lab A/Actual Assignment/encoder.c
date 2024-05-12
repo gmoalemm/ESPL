@@ -25,7 +25,7 @@ int main(int argc, char **argv)
         }
 
         // an argument must contain at least 2 characters (+/- and a letter)
-        if (!argv[i][0] || !argv[i][1])
+        if (argv[i][0] == '\0' || argv[i][1] == '\0')
         {
             if (debugMode)
             {
@@ -43,7 +43,7 @@ int main(int argc, char **argv)
             debugMode = argv[i][0] == '+';
         }
         // all the other argument must get a non-empty parameter
-        else if (argv[i][2])
+        else if (argv[i][2] != '\0')
         {
             if (argv[i][1] == 'e' && (argv[i][0] == '-' || argv[i][0] == '+'))
             {
@@ -108,7 +108,7 @@ int main(int argc, char **argv)
         fclose(out);
     }
 
-    return i < 0;
+    return i < 0; // 1 when i is -1
 }
 
 /**
