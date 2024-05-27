@@ -1,4 +1,10 @@
-all: myshell
+all: myshell looper
+
+looper: looper.o
+	gcc -m32 -Wall -o looper looper.o
+
+looper.o: looper.c
+	gcc -m32 -Wall -g -c -o looper.o looper.c
 
 myshell: myshell.o LineParser.o
 	gcc -m32 -Wall -o myshell myshell.o LineParser.o
@@ -10,4 +16,4 @@ LineParser.o: LineParser.h LineParser.c
 	gcc -m32 -Wall -g -c -o LineParser.o LineParser.c
 
 clean:
-	rm -f myshell myshell.o LineParser.o
+	rm -f myshell myshell.o LineParser.o looper looper.o
