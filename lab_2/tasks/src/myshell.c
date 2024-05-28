@@ -4,11 +4,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <signal.h>
 #include "../include/LineParser.h"
 
 #define LINE_MAX 2048
 #define FALSE 0
 #define TRUE 1
+
+// ? there is a mixing of outputs here (for example when calling the looper), should I fix this?
 
 int execute(cmdLine *pCmdLine)
 {
@@ -66,6 +69,20 @@ int main(int argc, char **argv)
             if (chdir(command->arguments[1]) == -1 && debug)
             {
                 perror("Couldn't change directory");
+            }
+        }
+        else if (strcmp(command->arguments[0], "alarm") == 0)
+        {
+            if (kill(atoi(command->arguments[1]), SIGCONT) == -1 && debug)
+            {
+                perror("Signaling failed");
+            }
+        }
+        else if (strcmp(command->arguments[0], "blast") == 0)
+        {
+            if (kill(atoi(command->arguments[1]), SIGINT) == -1 && debug)
+            {
+                perror("Signaling failed");
             }
         }
         else
