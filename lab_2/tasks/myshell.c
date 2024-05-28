@@ -3,11 +3,14 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include "LineParser.h"
 
 #define LINE_MAX 2048
+#define FALSE 0
+#define TRUE 1
 
-int execute(cmdLine *pCmdLine)
+void execute(cmdLine *pCmdLine)
 {
 
     // * running "ls" with execv won't work because it requires the full path, as opposed to execvp which searches
@@ -21,14 +24,26 @@ int execute(cmdLine *pCmdLine)
 
     perror("Execution failed");
 
-    return 1;
+    _exit(1);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     char *cwd = NULL, line[LINE_MAX] = {0};
     cmdLine *command = NULL;
     int execError = 0, quit = 0;
+    int debug = FALSE;
+    int i;
+    int pid;
+
+    // scan for line arguments
+    for (i = 0; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-d") == 0)
+        {
+            debug = TRUE;
+        }
+    }
 
     do
     {
@@ -42,7 +57,7 @@ int main(void)
         // parse and execute it
 
         command = parseCmdLines(line);
-        quit = !strcmp(command->arguments[0], "quit");
+        quit = strcmp(command->arguments[0], "quit") == 0;
 
         if (!quit)
         {
@@ -50,7 +65,23 @@ int main(void)
             // ! this happend becuase the execute method uses the execv/execvp system call which
             // ! "replaces the current process image with a new process image" (~man).
             // * (meaning,) this system call replaces this program with the commands program.
-            execError = execute(command);
+            
+            if ((pid = fork()) > 0)
+            {
+                // parent
+                waitpid(pid, &execError, 0);
+            }
+            else
+            {
+                // child
+
+                if (debug)
+                {
+                    fprintf(stderr, "(d) pid = %d\tcommand = %s", getpid(), line);
+                }
+
+                execute(command);
+            } // ignoring the case of -1
         }
 
         free(command);
