@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include "LineParser.h"
+#include "../include/LineParser.h"
 
 #ifndef NULL
 #define NULL 0

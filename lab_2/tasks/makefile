@@ -1,19 +1,19 @@
 all: myshell looper
 
-looper: looper.o
-	gcc -m32 -Wall -o looper looper.o
+looper: bin/looper.o
+	gcc -m32 -Wall -o looper bin/looper.o
 
-looper.o: looper.c
-	gcc -m32 -Wall -g -c -o looper.o looper.c
+bin/looper.o: src/looper.c
+	gcc -m32 -Wall -g -c -o bin/looper.o src/looper.c
 
-myshell: myshell.o LineParser.o
-	gcc -m32 -Wall -o myshell myshell.o LineParser.o
+myshell: bin/myshell.o bin/LineParser.o
+	gcc -m32 -Wall -o myshell bin/myshell.o bin/LineParser.o
 
-myshell.o: myshell.c
-	gcc -m32 -Wall -g -c -o myshell.o myshell.c
+bin/myshell.o: src/myshell.c
+	gcc -m32 -Wall -g -c -o bin/myshell.o src/myshell.c
 
-LineParser.o: LineParser.h LineParser.c
-	gcc -m32 -Wall -g -c -o LineParser.o LineParser.c
+bin/LineParser.o: include/LineParser.h src/LineParser.c
+	gcc -m32 -Wall -g -c -o bin/LineParser.o src/LineParser.c
 
 clean:
-	rm -f myshell myshell.o LineParser.o looper looper.o
+	rm -f myshell bin/* myshell looper

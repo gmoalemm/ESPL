@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
-#include "LineParser.h"
+#include "../include/LineParser.h"
 
 #define LINE_MAX 2048
 #define FALSE 0
