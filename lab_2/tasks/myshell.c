@@ -69,7 +69,15 @@ int main(int argc, char **argv)
             if ((pid = fork()) > 0)
             {
                 // parent
-                waitpid(pid, &execError, 0);
+
+                // ? this is weird, for example, when calling "ls" without '&', 
+                // ? the command will print its output and the parent porocess
+                // ? will print the cwd simultaneously and they'll mix.
+                // ? is this supposed to happen?
+                if (command->blocking)
+                {
+                    waitpid(pid, &execError, 0);
+                }
             }
             else
             {
