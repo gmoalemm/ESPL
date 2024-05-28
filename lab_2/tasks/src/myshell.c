@@ -69,12 +69,12 @@ int main(int argc, char **argv)
             }
         }
         else
-        {   
+        {
             if ((pid = fork()) > 0)
             {
                 // parent
 
-                // ? this is weird, for example, when calling "ls" without '&', 
+                // ? this is weird, for example, when calling "ls" without '&',
                 // ? the command will print its output and the parent porocess
                 // ? will print the cwd simultaneously and they'll mix.
                 // ? is this supposed to happen?
@@ -112,7 +112,7 @@ int main(int argc, char **argv)
             } // ignoring the case of -1
         }
 
-        free(command);
+        freeCmdLines(command);
         command = NULL;
     } while (!execError && !quit);
 
