@@ -10,7 +10,7 @@
 #define FALSE 0
 #define TRUE 1
 
-void execute(cmdLine *pCmdLine)
+int execute(cmdLine *pCmdLine)
 {
 
     // * running "ls" with execv won't work because it requires the full path, as opposed to execvp which searches
@@ -19,12 +19,9 @@ void execute(cmdLine *pCmdLine)
     // * in addition, wildcards (for example) won't work, because it is the shell that is doing the expansion, and not the command itself.
     execvp(pCmdLine->arguments[0], pCmdLine->arguments);
 
-    // this part (printing an error and returning 1) will happen only if the execution will fail.
+    // this will happen only if the execution will fail.
     // "The exec() functions return only if an error has occurred." (~man)
-
-    perror("Execution failed");
-
-    _exit(1);
+    return 1;
 }
 
 int main(int argc, char **argv)
@@ -47,6 +44,8 @@ int main(int argc, char **argv)
 
     do
     {
+        execError = 0;
+
         // print the current working directory
         cwd = getcwd(cwd, PATH_MAX);
         printf("%s: ", cwd);
@@ -57,15 +56,20 @@ int main(int argc, char **argv)
         // parse and execute it
 
         command = parseCmdLines(line);
-        quit = strcmp(command->arguments[0], "quit") == 0;
 
-        if (!quit)
+        if (strcmp(command->arguments[0], "quit") == 0)
         {
-            // ! note that the execution will end after the command is executed (if an error didn't occur).
-            // ! this happend becuase the execute method uses the execv/execvp system call which
-            // ! "replaces the current process image with a new process image" (~man).
-            // * (meaning,) this system call replaces this program with the commands program.
-            
+            quit = TRUE;
+        }
+        else if (strcmp(command->arguments[0], "cd") == 0)
+        {
+            if (chdir(command->arguments[1]) == -1 && debug)
+            {
+                perror("Couldn't change directory");
+            }
+        }
+        else
+        {   
             if ((pid = fork()) > 0)
             {
                 // parent
@@ -88,7 +92,23 @@ int main(int argc, char **argv)
                     fprintf(stderr, "(d) pid = %d\tcommand = %s", getpid(), line);
                 }
 
-                execute(command);
+                // ! note that the execution will end after the command is executed (if an error didn't occur).
+                // ! this happend becuase the execute method uses the execv/execvp system call which
+                // ! "replaces the current process image with a new process image" (~man).
+                // * (meaning,) this system call replaces this program with the commands program.
+                execError = execute(command);
+
+                if (execError && debug)
+                {
+                    // this part will happen only if the execution will fail.
+                    // "The exec() functions return only if an error has occurred." (~man)
+
+                    perror("Execution failed");
+
+                    // * using _exit instead of exit becuase the latter doesn't just exits, but also, for example,
+                    // * flushes buffered I/O, and closes open file descriptors.
+                    _exit(1);
+                }
             } // ignoring the case of -1
         }
 
