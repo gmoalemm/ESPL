@@ -1,4 +1,10 @@
-all: myshell looper
+all: myshell looper mypipe
+
+mypipe: bin/mypipe.o
+	gcc -m32 -Wall -o mypipe bin/mypipe.o
+
+bin/mypipe.o: src/mypipe.c
+	gcc -m32 -Wall -g -c -o bin/mypipe.o src/mypipe.c
 
 looper: bin/looper.o
 	gcc -m32 -Wall -o looper bin/looper.o
@@ -16,4 +22,4 @@ bin/LineParser.o: include/LineParser.h src/LineParser.c
 	gcc -m32 -Wall -g -c -o bin/LineParser.o src/LineParser.c
 
 clean:
-	rm -f myshell bin/* myshell looper
+	rm -f myshell bin/* myshell looper mypipe

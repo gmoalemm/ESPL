@@ -1,12 +1,12 @@
 #include <stdio.h>
-#include <linux/limits.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/wait.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <sys/stat.h>
+#include <linux/limits.h> // for PATH_MAX
+#include <unistd.h>       // for execvp, close, dup, chdir, fork and constants
+#include <sys/wait.h>     // for waitpid
+#include <signal.h>       // for kill and constants
+#include <fcntl.h>        // for open
+#include <sys/stat.h>     // for permission constants
 #include "../include/LineParser.h"
 
 #define LINE_MAX 2048
