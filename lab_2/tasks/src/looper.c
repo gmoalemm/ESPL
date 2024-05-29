@@ -8,7 +8,10 @@ void handler(int sig)
 {
 	printf("\nRecieved Signal : %s\n", strsignal(sig));
 
-	// ! the original code was the commented one, I changes it based on the instructions
+	// ! the original code was the commented one, I changes it based on the
+	// ! instructions
+	// ? what is the right way to do this? I don't understand this task
+
 	if (sig == SIGTSTP)
 	{
 		// signal(SIGTSTP, SIG_DFL);
