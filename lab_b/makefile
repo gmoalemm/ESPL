@@ -1,3 +1,5 @@
+# ! change the directories when submitting
+
 all: part0 part1
 
 part1: virusDetector

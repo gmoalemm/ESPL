@@ -16,7 +16,6 @@ DESCRIPTION
 #include <stdlib.h>       // for calloc
 #include <stdbool.h>
 
-// a structure that represents a vidrus' name and signature.
 typedef struct virus
 {
     unsigned short SigSize;
@@ -24,55 +23,102 @@ typedef struct virus
     unsigned char *sig;
 } virus;
 
+typedef struct link
+{
+    struct link *nextVirus;
+    virus *vir;
+} link;
+
+typedef struct fun_desc
+{
+    char *name;
+    void (*fun)(void);
+} fun_desc;
+
 // auxiliary functions (required)
 
 void SetSigFileName();
 virus *readVirus(FILE *);
 void printVirus(virus *);
+void list_print(link *, FILE *);
+link *list_append(link *, virus *);
+void list_free(link *);
+void detectViruses();
+void fixFile();
 
 // auxiliary functions (not required)
 
-void printHex(unsigned char *, size_t);
-FILE *openSigFile();
-void freeVirus(virus *);
+void printHexToFile(FILE *, unsigned char *, size_t);
+void openSigFile();
 bool reachedEnd(FILE *);
+void printVirusToFile(FILE *, virus *);
+void loadViruses();
+void printViruses();
+void reset();
+void quit();
 
 // globals
 // ? should they be globals?
 
 char sigFileName[PATH_MAX] = {0};
-
 bool usingBigEndian = false;
+FILE *sigFile = NULL;
+link *viruses = NULL;
 
 int main(int argc, char **argv)
 {
-    FILE *sigFile = NULL;
-    virus *currentVirus;
+    fun_desc functions[] = {
+        {"Set signatures file name", SetSigFileName},
+        {"Load signatures", loadViruses},
+        {"Print signatures", printViruses},
+        {"Detect viruses", detectViruses},
+        {"Fix file", fixFile},
+        {"Quit", quit}};
+    int functionsNo = sizeof(functions) / sizeof(functions[0]);
+    int op = -1, i = 0;
+    char line[8] = {0};
+    bool error = false;
 
-    strcpy(sigFileName, "signatures-L");
+    // default signatures file
+    // TODO: remove "files/" when submitting
+    strcpy(sigFileName, "files/signatures-L");
 
-    // SetSigFileName();
-
-    // open the signature file
-    sigFile = openSigFile();
-
-    if (!sigFile)
+    do
     {
-        fprintf(stderr, "Error opening signature file.");
-        return 1;
+        for (i = 0; i < functionsNo; i++)
+        {
+            printf("%d) %s\n", i, functions[i].name);
+        }
+
+        printf(">> choose an option: ");
+
+        if (fgets(line, 8, stdin))
+        {
+            op = atoi(line);
+
+            if (op < 0 || op >= functionsNo)
+            {
+                fprintf(stderr, "!> not an option.\n");
+                error = true;
+            }
+            else
+            {
+                functions[op].fun();
+            }
+        }
+        else
+        {
+            fprintf(stderr, "!> error reading option.\n");
+            error = true;
+        }
+    } while (!error && strcmp(sigFileName, ""));
+
+    if (error)
+    {
+        quit();
     }
 
-    while (!reachedEnd(sigFile))
-    {
-        currentVirus = readVirus(sigFile);
-        printVirus(currentVirus);
-        printf("\n");
-        freeVirus(currentVirus);
-    }
-
-    fclose(sigFile);
-
-    return 0;
+    return error;
 }
 
 /**
@@ -126,16 +172,81 @@ virus *readVirus(FILE *file)
 }
 
 /**
- * @brief this function receives a pointer to a virus structure.
+ * @brief The function prints the virus data to stdout.
  *
  * @param virus a virus.
  */
 void printVirus(virus *virus)
 {
-    printf("# name:         %s\n", virus->virusName);
-    printf("# sig_size:     %d\n", virus->SigSize);
-    printf("# signature:    ");
-    printHex(virus->sig, virus->SigSize);
+    printVirusToFile(stdout, virus);
+}
+
+/**
+ * @brief Print the data of every link in list to the given stream.
+ * Each item followed by a newline character.
+ *
+ * @param virus_list a linked list of viruses.
+ * @param stream an output stream.
+ * @pre stream is open.
+ */
+void list_print(link *virus_list, FILE *stream)
+{
+    while (virus_list)
+    {
+        printVirusToFile(stream, virus_list->vir);
+        fputc('\n', stream);
+        virus_list = virus_list->nextVirus;
+    }
+}
+
+/**
+ * @brief Add a new link with the given data at the beginning of the list.
+ *
+ * @param virus_list a list of viruses.
+ * @param data a virus to append.
+ * @return link* a pointer to the list (i.e., the first link in the list).
+ */
+link *list_append(link *virus_list, virus *data)
+{
+    link *newLink = (link *)calloc(1, sizeof(link));
+
+    newLink->nextVirus = virus_list;
+    newLink->vir = data;
+
+    return newLink;
+}
+
+/**
+ * @brief free the memory allocated by the list.
+ *
+ * @param virus_list
+ */
+void list_free(link *virus_list)
+{
+    link *curr = virus_list, *next = NULL;
+
+    while (curr)
+    {
+        next = curr->nextVirus;
+
+        free(curr->vir->sig);
+        free(curr->vir);
+        free(curr);
+
+        curr = next;
+    }
+}
+
+void detectViruses()
+{
+    // TODO
+    printf("?> Not implemented\n");
+}
+
+void fixFile()
+{
+    // TODO
+    printf("?> Not implemented\n");
 }
 
 /**
@@ -144,30 +255,32 @@ void printVirus(virus *virus)
  *
  * @param buffer a memory location to read bytes from.
  * @param length number of bytes to read.
+ * @param file an output stream.
+ *
+ * @pre file is open.
  */
-void printHex(unsigned char *buffer, size_t length)
+void printHexToFile(FILE *file, unsigned char *buffer, size_t length)
 {
     for (size_t i = 0; i < length; i++)
     {
         // 02 for a two-digit representation, hh is for a char
-        printf("%02hhx ", buffer[i]);
+        fprintf(file, "%02hhx ", buffer[i]);
     }
 }
 
 /**
  * @brief open the signature file for reading and set the endian accordingly.
- *
- * @return FILE* the signature file in sigFileName global or NULL if either
- * the file doesn't exist or begins in an invalid magic number.
  */
-FILE *openSigFile()
+void openSigFile()
 {
-    FILE *file = fopen(sigFileName, "r");
+    reset();
+
+    sigFile = fopen(sigFileName, "r");
     char magicNumber[4] = {0};
 
-    if (file)
+    if (sigFile)
     {
-        fread(magicNumber, sizeof(char), 4, file);
+        fread(magicNumber, sizeof(char), 4, sigFile);
 
         // using strncmp because the number is not terminated by a null
         if (strncmp(magicNumber, "VIRB", 4) == 0)
@@ -179,19 +292,11 @@ FILE *openSigFile()
             // the number is not VIRL nor VIRB (then strncmp would have
             // returned 0 and the condition wouldn't have been met)
 
-            fclose(file);
+            fclose(sigFile);
 
-            file = NULL;
+            sigFile = NULL;
         }
     }
-
-    return file;
-}
-
-void freeVirus(virus *v)
-{
-    free(v->sig);
-    free(v);
 }
 
 /**
@@ -215,4 +320,78 @@ bool reachedEnd(FILE *file)
     fseek(file, -1, SEEK_CUR);
 
     return false;
+}
+
+/**
+ * @brief The function prints the virus data to a file.
+ *
+ * @param file an output stream.
+ * @param virus a virus.
+ *
+ * @pre file is open.
+ */
+void printVirusToFile(FILE *file, virus *virus)
+{
+    fprintf(file, "# name:         %s\n", virus->virusName);
+    fprintf(file, "# sig_size:     %d\n", virus->SigSize);
+    fprintf(file, "# signature:    ");
+    printHexToFile(file, virus->sig, virus->SigSize);
+}
+
+/**
+ * @brief load the viruses from the current signature file.
+ */
+void loadViruses()
+{
+    openSigFile();
+
+    fseek(sigFile, 4, SEEK_SET);
+
+    viruses = NULL;
+
+    while (!reachedEnd(sigFile))
+    {
+        viruses = list_append(viruses, readVirus(sigFile));
+    }
+}
+
+/**
+ * @brief print all the currently loaded viruses to stdout.
+ */
+void printViruses()
+{
+    list_print(viruses, stdout);
+}
+
+/**
+ * @brief free all allocated memory and set the file and list of viruses
+ * to null.
+ */
+void reset()
+{
+    if (sigFile)
+    {
+        fclose(sigFile);
+
+        sigFile = NULL;
+    }
+
+    if (viruses) // ! redundant check (we know list_free works on null)
+    {
+        list_free(viruses);
+
+        viruses = NULL;
+    }
+}
+
+/**
+ * @brief quit the program.
+ */
+void quit()
+{
+    reset();
+
+    memset(sigFileName, 0, PATH_MAX);
+
+    printf(">> bye!\n");
 }
