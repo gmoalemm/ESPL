@@ -20,7 +20,7 @@ DESCRIPTION
  * @param buffer a memory location to read bytes from.
  * @param length number of bytes to read.
  */
-void printHex(char *buffer, size_t length)
+void printHex(unsigned char *buffer, size_t length)
 {
     for (size_t i = 0; i < length; i++)
     {
@@ -31,8 +31,10 @@ void printHex(char *buffer, size_t length)
 
 int main(int argc, char **argv)
 {
+    // use chars buffer so each byte is read seperately
+
     FILE *file;
-    char buffer[BUFFER_SIZE] = {0}; // use chars so each byte is read seperately
+    unsigned char buffer[BUFFER_SIZE] = {0};
     size_t itemsRead;
 
     if (argc > 2)
