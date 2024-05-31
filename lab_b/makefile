@@ -1,6 +1,12 @@
-all: bubblesort
+all: bubblesort hexaPrint
 
-runval: bubblesort
+hexaPrint: bin/hexaPrint.o
+	gcc -m32 -Wall -g -o hexaPrint bin/hexaPrint.o
+
+bin/hexaPrint.o: src/hexaPrint.c
+	gcc -m32 -Wall -g -c -o bin/hexaPrint.o src/hexaPrint.c
+
+bubble_val: bubblesort
 	valgrind --leak-check=full ./bubblesort 1 2 4 3
 
 bubblesort: bin/bubblesort.o
@@ -10,4 +16,4 @@ bin/bubblesort.o: src/bubblesort.c
 	gcc -m32 -Wall -g -c -o bin/bubblesort.o src/bubblesort.c
 
 clean:
-	rm -f bin/* bubblesort
+	rm -f bin/* bubblesort hexaPrint
