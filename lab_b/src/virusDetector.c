@@ -16,6 +16,8 @@ DESCRIPTION
 #include <stdlib.h>
 #include <stdbool.h>
 
+#define BUFFER_MAX 10 << 10
+
 typedef struct virus
 {
     unsigned short SigSize;
@@ -45,6 +47,7 @@ link *list_append(link *, virus *);
 void list_free(link *);
 void detectViruses();
 void fixFile();
+void detect_virus(char *, unsigned int, link *);
 
 // auxiliary functions (not required)
 
@@ -61,6 +64,7 @@ void quit();
 // ? should they be globals?
 
 char sigFileName[PATH_MAX] = {0};
+char *scannedFileName = NULL;
 bool usingBigEndian = false;
 FILE *sigFile = NULL;
 link *viruses = NULL;
@@ -78,6 +82,14 @@ int main(int argc, char **argv)
     int op = -1, i = 0;
     char line[8] = {0};
     bool error = false;
+
+    for (i = 0; i < argc; i++)
+    {
+        if (!strcmp(argv[i], "-FILE"))
+        {
+            scannedFileName = argv[i + 1];
+        }
+    }
 
     // default signatures file
     // TODO: remove "files/" when submitting
@@ -239,14 +251,66 @@ void list_free(link *virus_list)
 
 void detectViruses()
 {
-    // TODO
-    printf("?> Not implemented\n");
+    FILE *file = fopen(scannedFileName, "r");
+    char buffer[BUFFER_MAX] = {0};
+    size_t bytesRead;
+
+    if (file)
+    {
+        bytesRead = fread(buffer, sizeof(char), BUFFER_MAX, file);
+        fclose(file);
+
+        // assuming bytesRead <= BUFFER_MAX
+        detect_virus(buffer, bytesRead, viruses);
+    }
+    else
+    {
+        fprintf(stderr, "!> couldn't open the file.");
+    }
 }
 
 void fixFile()
 {
     // TODO
     printf("?> Not implemented\n");
+}
+
+/**
+ * @brief compares the content of the buffer byte-by-byte with the virus
+ * signatures stored in the virus_list linked list. If a virus is detected,
+ * for each detected virus the detect_virus function prints its name, sig. len
+ * and starting byte in the file.
+ *
+ * @param buffer content of a file.
+ * @param size the minimum between the size of the buffer and the size of the
+ * suspected file in bytes
+ * @param virus_list list of known viruses' signatures.
+ */
+void detect_virus(char *buffer, unsigned int size, link *virus_list)
+{
+    size_t i;
+    link *current;
+
+    if (!virus_list)
+    {
+        return;
+    }
+
+    for (i = 0; i < size; i++)
+    {
+        current = virus_list;
+
+        while (current)
+        {
+            if (!memcmp(buffer + i, current->vir->sig, current->vir->SigSize))
+            {
+                printf("# %s (%d) @ %d\n",
+                       current->vir->virusName, current->vir->SigSize, i);
+            }
+
+            current = current->nextVirus;
+        }
+    }
 }
 
 /**
