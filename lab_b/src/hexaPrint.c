@@ -1,3 +1,14 @@
+/**
+NAME
+    hexaPrint - prints the hexdecimal value of the input bytes from a given file
+SYNOPSIS
+    hexaPrint FILE
+DESCRIPTION
+    hexaPrint receives, as a command-line argument, the name of a "binary" file,
+    and prints the hexadecimal value of each byte to the standard output,
+    separated by spaces.
+*/
+
 #include <stdio.h>
 
 #define BUFFER_SIZE 64
