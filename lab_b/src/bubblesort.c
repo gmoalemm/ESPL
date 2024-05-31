@@ -25,7 +25,6 @@ int main(int argc, char **argv)
     char **arr = argv + 1; // the second argument
     int i, n = argc - 1;   // ignore the program's name
 
-    // ! this memory never gets freed
     int *numbers = (int *)calloc(n, sizeof(int));
 
     printf("Original array:");
