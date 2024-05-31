@@ -11,9 +11,9 @@ DESCRIPTION
 */
 
 #include <stdio.h>
-#include <linux/limits.h> // for PATH_MAX
-#include <string.h>       // for strcpy, strlen
-#include <stdlib.h>       // for calloc
+#include <linux/limits.h>
+#include <string.h>
+#include <stdlib.h>
 #include <stdbool.h>
 
 typedef struct virus
