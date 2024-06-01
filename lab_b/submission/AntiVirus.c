@@ -1,16 +1,17 @@
 /**
 NAME
-    virusDetector - detects a virus in a file from a given set of viruses.
+    AntiVirus - detects a virus in a file from a given set of viruses.
 SYNOPSIS
-    virusDetector FILE.
+    AntiVirus FILE.
 DESCRIPTION
-    virusDetector compares the content of the given FILE byte-by-byte with a
+    AntiVirus compares the content of the given FILE byte-by-byte with a
     pre-defined set of viruses described in the file. The comparison is done
     according to a naive algorithm described in task 2.
+
     FILE - the suspected file.
 EXAMPLES
-    virusDetector
-    virusDetector -FILE infected
+    Antivirus
+    Antivirus -FILE infected
 */
 
 #include <stdio.h>
