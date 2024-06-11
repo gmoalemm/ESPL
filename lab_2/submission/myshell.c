@@ -7,7 +7,7 @@
 #include <signal.h>       // for kill and constants
 #include <fcntl.h>        // for open
 #include <sys/stat.h>     // for permission constants
-#include "../include/LineParser.h"
+#include "LineParser.h"
 
 #define LINE_MAX 2048
 #define FALSE 0
