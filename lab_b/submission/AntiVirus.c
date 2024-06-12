@@ -215,7 +215,7 @@ virus *readVirus(FILE *file)
     // swap the bytes
     if (usingBigEndian)
     {
-        newVirus->SigSize = (newVirus->SigSize << 8) + (newVirus->SigSize >> 8);
+        newVirus->SigSize = (newVirus->SigSize << 8) | (newVirus->SigSize >> 8);
     }
 
     // get the name and the signature of the virus
