@@ -65,7 +65,7 @@ main:
 
     done_printing_args:
         push    dword 'A'
-        call    encode
+        call    encode_char
         add     esp, 4
         
         call    print_new_line
@@ -78,7 +78,7 @@ main:
 
 ; reads a character, encodes it by adding 1 to the character value if it is in 
 ; the range 'A' to 'z' (no encoding otherwise), and outputs it.
-encode:
+encode_char:
     push    ebp
     mov     ebp, esp
     pushad
