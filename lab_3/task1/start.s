@@ -1,16 +1,23 @@
 section .data
-    linefeed db 10
-    infile db 0
-    outfile db 1
+    stdin dd 0
+    stdout dd 1
+    linefeed dd 10
+    infile dd -1
+    infile_flag dd "-i", 0
+    outfile dd -1
+    outfile_flag dd "-o", 0
+    file_not_found dd "file not found", 0
+    buffer dd 1
 
 section .text
 global _start
 global system_call
 extern strlen
+extern strncmp
 
 _start:
     pop     dword ecx    ; ecx = argc
-    mov     esi, esp      ; esi = argv
+    mov     esi, esp     ; esi = argv
     mov     eax, ecx     ; put the number of arguments into eax
 
     ; shift num of args two bytes to the left (mult by pointer size (= 4))
@@ -31,6 +38,7 @@ _start:
     int     0x80
     nop
 
+
 main:
     push    ebp             ; Save caller state
     mov     ebp, esp
@@ -40,13 +48,25 @@ main:
     mov     ecx, [ebp+12]   ; argv
     mov     edx, [ebp+16]   ; envp
 
+    ; set default streams
+    mov eax, [stdin]
+    mov [infile], eax
+
+    mov eax, [stdout]
+    mov [outfile], eax
+
     print_next_arg:
         cmp     ebx, 0
         jz      done_printing_args
 
-        push    dword [ecx]     ; pointer to the current string, compute its length
+        ; calculate the current arg's length
+        push    dword ecx  
+
+        push    dword [ecx]     
         call    strlen
         add     esp, 4
+
+        pop     ecx
 
         ; print the string
         push    dword eax     ; length
@@ -55,26 +75,124 @@ main:
         push    dword 4       ; print syscall
         call    system_call
         add     esp, 16
-
         call    print_new_line
 
-        ; done one string
-        dec     ebx     
-        add     ecx, 4
-        jmp     print_next_arg
+        ; check if it is a "-i" flag
+        get_input:
+            ; compare the first two bytes
+            push    dword ecx
+
+            push    dword 2   
+            push    dword infile_flag
+            push    dword [ecx]
+            call    strncmp
+            add     esp, 12
+
+            pop     ecx
+
+            ; if it is not a "-i" flag, try "-o"
+            cmp     eax, 0
+            jne     get_output
+
+            ; open the file
+            mov eax, [ecx]          ; eax is not the pointer itself
+            add eax, 2              ; move 2 forward to skip "-i"
+
+            push    dword 1411      ; permissions, ignored
+            push    dword 0         ; read access
+            push    dword eax       ; path
+            push    dword 5         ; open syscall
+            call    system_call
+            add     esp, 16
+            
+            mov     [infile], eax
+
+            ; if got a negative value, print an error end exit
+            cmp     dword [infile], 0
+            js      print_err
+            je      next_arg
+
+        get_output:
+            ; compare the first two bytes
+            push    dword ecx
+
+            push    dword 2   
+            push    dword outfile_flag
+            push    dword [ecx]
+            call    strncmp
+            add     esp, 12
+
+            pop     ecx
+
+            ; if it is not a "-o" flag, continue
+            cmp     eax, 0
+            jne     next_arg
+
+            ; open the file
+            mov eax, [ecx]          ; eax is not the pointer itself
+            add eax, 2              ; move 2 forward to skip "-o"
+
+            push    dword 1411      ; permissions, all (777 octal)
+            push    dword 65        ; write/create access
+            push    dword eax       ; path
+            push    dword 5         ; open syscall
+            call    system_call
+            add     esp, 16
+            
+            mov     [outfile], eax
+
+        next_arg:
+            ; done one string
+            dec     ebx     
+            add     ecx, 4
+            jmp     print_next_arg
+
+    print_err:
+        ; calculate the length of the error message
+        push    dword file_not_found   
+        call    strlen
+        add     esp, 4
+
+        ; print the message to stdout
+        push    dword eax           
+        push    dword file_not_found         
+        push    dword [stdout]     
+        push    dword 4   
+        call    system_call
+        add     esp, 16
+        call    print_new_line
 
     done_printing_args:
-        push    dword 'A'
+        ; read a char from the input file
+        push    dword 1           
+        push    dword buffer         
+        push    dword [infile]     
+        push    dword 3   
+        call    system_call
+        add     esp, 16
+
+        push    dword [buffer]
         call    encode_char
         add     esp, 4
-        
-        call    print_new_line
 
-    done_main:
-        popad           ; Restore caller state (registers)
-        mov     eax, 0  ; place returned value where caller can see it
-        pop     ebp     ; Restore caller state
-        ret             ; Back to caller
+    call print_new_line
+
+    close_files:
+        push    dword [infile]
+        push    6
+        call    system_call
+        add     esp, 8
+
+        push    dword [outfile]
+        push    6
+        call    system_call
+        add     esp, 8
+
+    popad           ; Restore caller state (registers)
+    mov     eax, 0  ; place returned value where caller can see it
+    pop     ebp     ; Restore caller state
+    ret             ; Back to caller
+
 
 ; reads a character, encodes it by adding 1 to the character value if it is in 
 ; the range 'A' to 'z' (no encoding otherwise), and outputs it.
@@ -92,13 +210,12 @@ encode_char:
     inc     dword [ebp + 8] 
 
     print_encoded: 
-        ; print the encoded char
         mov     ebx, ebp
         add     ebx, 8
 
         push    dword 1         ; length
         push    dword ebx       ; pointer
-        push    dword [outfile]   ; stdout
+        push    dword [outfile]
         push    dword 4         ; print syscall
         call    system_call
         add     esp, 16
@@ -108,18 +225,21 @@ encode_char:
     pop     ebp
     ret
 
+
 print_new_line:
     push    ebp
+    mov     ebp, esp
 
-    push    dword 1           
+    push    dword 2           
     push    dword linefeed           
-    push    dword [outfile]     
+    push    dword [stdout]   
     push    dword 4   
     call    system_call
     add     esp, 16
 
     pop     ebp
     ret
+
 
 system_call:
     push    ebp             ; Save caller state
