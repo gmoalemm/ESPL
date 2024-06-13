@@ -1,5 +1,7 @@
-section .rodata
+section .data
     linefeed db 10
+    infile db 0
+    outfile db 1
 
 section .text
 global _start
@@ -40,7 +42,7 @@ main:
 
     print_next_arg:
         cmp     ebx, 0
-        jz      done
+        jz      done_printing_args
 
         push    dword [ecx]     ; pointer to the current string, compute its length
         call    strlen
@@ -51,30 +53,73 @@ main:
         push    dword [ecx]   ; pointer
         push    dword 1       ; stdout
         push    dword 4       ; print syscall
+        call    system_call
+        add     esp, 16
 
-        call system_call
-
-        add esp, 16
-
-        ; print a new line
-        push     dword 1           
-        push     dword linefeed           
-        push     dword 1     
-        push     dword 4           
-        call system_call
-
-        add esp, 16
+        call    print_new_line
 
         ; done one string
         dec     ebx     
         add     ecx, 4
         jmp     print_next_arg
 
-    done:
+    done_printing_args:
+        push    dword 'A'
+        call    encode
+        add     esp, 4
+        
+        call    print_new_line
+
+    done_main:
         popad           ; Restore caller state (registers)
         mov     eax, 0  ; place returned value where caller can see it
         pop     ebp     ; Restore caller state
         ret             ; Back to caller
+
+; reads a character, encodes it by adding 1 to the character value if it is in 
+; the range 'A' to 'z' (no encoding otherwise), and outputs it.
+encode:
+    push    ebp
+    mov     ebp, esp
+    pushad
+
+    cmp     [ebp + 8], dword 'A'
+    js      print_encoded           ; eax < 'A'
+
+    cmp     [ebp + 8], dword 'Z'
+    ja      print_encoded           ; 'Z' < eax
+
+    inc     dword [ebp + 8] 
+
+    print_encoded: 
+        ; print the encoded char
+        mov     ebx, ebp
+        add     ebx, 8
+
+        push    dword 1         ; length
+        push    dword ebx       ; pointer
+        push    dword [outfile]   ; stdout
+        push    dword 4         ; print syscall
+        call    system_call
+        add     esp, 16
+
+    popad
+    mov     eax, 0
+    pop     ebp
+    ret
+
+print_new_line:
+    push    ebp
+
+    push    dword 1           
+    push    dword linefeed           
+    push    dword [outfile]     
+    push    dword 4   
+    call    system_call
+    add     esp, 16
+
+    pop     ebp
+    ret
 
 system_call:
     push    ebp             ; Save caller state
