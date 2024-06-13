@@ -12,7 +12,7 @@ start: start.s
 main: main.c
 	gcc -m32 -Wall -ansi -c -nostdlib -fno-stack-protector main.c -o main.o
 
-util: util.c
+util: util.c util.h
 	gcc -m32 -Wall -ansi -c -nostdlib -fno-stack-protector util.c -o util.o
 
 clean:
