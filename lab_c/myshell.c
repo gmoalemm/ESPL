@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <linux/limits.h> // for PATH_MAX
-#include <unistd.h>       // for execvp, close, dup, chdir, fork and constants
+#include <unistd.h>       // for execvp, close, dup, chdir, fork, pipe and constants
 #include <sys/wait.h>     // for waitpid
 #include <signal.h>       // for kill and constants
 #include <fcntl.h>        // for open
@@ -23,7 +23,6 @@ int execute(cmdLine *pCmdLine)
 {
     execvp(pCmdLine->arguments[0], pCmdLine->arguments);
 
-    // this will happen only if the execution will fail.
     return 1;
 }
 
@@ -55,7 +54,7 @@ int redirect(const char *file, int oldfd, int debug)
     {
         if (debug)
         {
-            perror("(d) Couldn't close file");
+            perror("!> couldn't close file.");
         }
 
         return 1;
@@ -67,7 +66,7 @@ int redirect(const char *file, int oldfd, int debug)
     {
         if (debug)
         {
-            perror("(d) Couldn't open file");
+            perror("!> couldn't open file.");
         }
 
         return 1;
@@ -79,14 +78,14 @@ int redirect(const char *file, int oldfd, int debug)
         {
             // I use fprintf here because the call actually worked,
             // just not as expected
-            fprintf(stderr, "(d) open returned something unexpected");
+            fprintf(stderr, "!> open returned something unexpected.");
         }
 
         if (close(filedp) == -1) // no need to keep it open twice
         {
             if (debug)
             {
-                perror("(d) Couldn't close file");
+                perror("!> couldn't close file.");
             }
         }
 
@@ -103,11 +102,20 @@ int redirect(const char *file, int oldfd, int debug)
  * @param rawCommand the actual line written by the user.
  * @param debug indicates if errors should be printed to stderr.
  */
-void runChildProcess(cmdLine *cmd, char *rawCommand, int debug)
+void runChildProcess(cmdLine *cmd, int debug)
 {
+    int i;
+
     if (debug)
     {
-        fprintf(stderr, "\n(d) pid = %d | command = %s", getpid(), rawCommand);
+        fprintf(stderr, "!> pid = %d | cmd = %s", getpid(), cmd->arguments[0]);
+
+        for(i = 1; i < cmd->argCount; i++)
+        {
+            fprintf(stderr, " %s", cmd->arguments[i]);
+        }
+
+        fprintf(stderr, "\n");
     }
 
     if ((cmd->inputRedirect &&
@@ -125,19 +133,32 @@ void runChildProcess(cmdLine *cmd, char *rawCommand, int debug)
 
     if (debug)
     {
-        perror("(d) Execution failed");
+        perror("!> execution failed.");
     }
 
     _exit(1);
+}
+
+/**
+ * @brief check if a command that uses piping is valid (redirections make sense).
+ *
+ * @param cmd command to check.
+ * @return int TRUE if the piping is valid (or no piping at all),
+ * FALSE otherwise.
+ */
+int validPiping(cmdLine *cmd)
+{
+    return !(cmd->next) || (!(cmd->outputRedirect || cmd->next->inputRedirect));
 }
 
 int main(int argc, char **argv)
 {
     char cwd[PATH_MAX] = {0}, line[LINE_MAX] = {0};
     cmdLine *command = NULL;
-    int execError = FALSE, pid, stat;
-    int debug = FALSE;
+    int execError = FALSE, debug = FALSE;
     int i;
+    int p[2];
+    pid_t pid1, pid2;
 
     // scan for line arguments
     for (i = 0; i < argc; i++)
@@ -179,7 +200,7 @@ int main(int argc, char **argv)
             {
                 if (debug)
                 {
-                    perror("(d) Couldn't change directory");
+                    perror("!> couldn't change directory.");
                 }
             }
             else
@@ -191,33 +212,83 @@ int main(int argc, char **argv)
         {
             if (kill(atoi(command->arguments[1]), SIGCONT) == -1 && debug)
             {
-                perror("(d) Signaling failed");
+                perror("!> signaling failed.");
             }
         }
         else if (strcmp(command->arguments[0], "blast") == 0)
         {
             if (kill(atoi(command->arguments[1]), SIGINT) == -1 && debug)
             {
-                perror("(d) Signaling failed");
+                perror("!> signaling failed.");
+            }
+        }
+        // ? is this the right spot?
+        else if (!validPiping(command))
+        {
+            if (debug)
+            {
+                fprintf(stderr, "!> invalid piping!\n");
+            }
+        }
+        else if (command->next)
+        {
+            pipe(p);
+
+            if (!(pid1 = fork()))
+            {
+                // child 1
+
+                close(STDOUT_FILENO);
+                dup(p[1]);
+                close(p[1]);
+
+                runChildProcess(command, debug);
+            }
+            else if (pid1 > 0)
+            {
+                // parent
+
+                close(p[1]);
+                
+                if (!(pid2 = fork()))
+                {
+                    // child 2
+
+                    close(STDIN_FILENO);
+                    dup(p[0]);
+                    close(p[0]);
+
+                    runChildProcess(command->next, debug);
+                }
+                else if (pid2 > 0)
+                {
+                    // parent again
+
+                    close(p[0]);
+
+                    // ? should i always wait?
+                    waitpid(pid1, NULL, 0);
+                    waitpid(pid2, NULL, 0);
+                }
             }
         }
         else
         {
-            if ((pid = fork()) > 0)
+            if ((pid1 = fork()) > 0)
             {
                 if (command->blocking)
                 {
-                    waitpid(pid, &stat, 0);
+                    waitpid(pid1, NULL, 0);
                 }
             }
-            else if (pid < 0)
+            else if (pid1 < 0)
             {
-                perror("fork failed");
+                perror("!> fork failed.");
                 execError = TRUE;
             }
             else
             {
-                runChildProcess(command, line, debug);
+                runChildProcess(command, debug);
             }
         }
 
