@@ -17,6 +17,9 @@
 #define RUNNING 1
 #define SUSPENDED 0
 
+#define HISTLEN 20
+#define MAX_BUF 200
+
 typedef struct process
 {
     cmdLine *cmd;         /* the parsed command line*/
@@ -24,6 +27,25 @@ typedef struct process
     int status;           /* status of the process: RUNNING/SUSPENDED/TERMINATED */
     struct process *next; /* next process in chain */
 } process;
+
+/*** lab c - history */
+
+void printHistory(char hist[HISTLEN][MAX_BUF], int oldest, int newest)
+{
+    int i = oldest;
+    int c = 0;
+
+    while (i != newest)
+    {
+        printf("%d\t%s", c++, hist[i]);
+        i = (i + 1) % HISTLEN;
+    }
+
+    if (hist[i])
+    {
+        printf("%d\t%s", c++, hist[i]);
+    }
+}
 
 /*** lab c - processes manager */
 
@@ -69,7 +91,7 @@ int getProcStatus(pid_t pid)
  * That is because we know that if a node is not first in the chain, it will
  * eventually get freed when the firt command in chain will get freed.
  * If we'd try to free it before the first, we'll get an error.
- * @param node 
+ * @param node
  */
 void freeIfFirstInChain(cmdLine *node)
 {
@@ -385,6 +407,9 @@ int main(int argc, char **argv)
     int p[2];
     pid_t pid1, pid2;
     process *processes = NULL;
+    char history[HISTLEN][MAX_BUF];
+    int newest = -1, oldest = -1;
+    char *tmp = NULL;
 
     // scan for line arguments
     for (i = 0; i < argc; i++)
@@ -393,6 +418,11 @@ int main(int argc, char **argv)
         {
             debug = TRUE;
         }
+    }
+
+    for (i = 0; i < HISTLEN; i++)
+    {
+        history[i][0] = '\0';
     }
 
     getcwd(cwd, PATH_MAX);
@@ -423,7 +453,88 @@ int main(int argc, char **argv)
             break;
         }
 
-        if (strcmp(command->arguments[0], "cd") == 0)
+        if (command->arguments[0][0] == '!')
+        {
+            i = -1;
+
+            // repeat last command
+            if (strcmp(command->arguments[0], "!!") == 0)
+            {
+                // no history
+                if (newest == -1)
+                {
+                    continue;
+                }
+
+                i = newest;
+            }
+            else
+            {
+                // extract the index
+                i = (int) strtol(command->arguments[0] + 1, &tmp, 10);
+
+                // check if the entire string after the '!' was a number
+                // (this test is mentioned in the manual for strtol)
+                if (!(command->arguments[0][1] != '\0' && *tmp == '\0'))
+                {
+                    puts("*> not an index.");
+                    i = -1;
+                }
+                else if (i < 0 || i >= HISTLEN || newest == -1)
+                {
+                    puts("*> invalid index.");
+                    i = -1;
+                }
+                else
+                {
+                    i = (oldest + i) % HISTLEN;
+
+                    if (history[i][0] == '\0')
+                    {
+                        puts("*> invalid index.");
+                        i = -1;
+                    }
+                }
+            }
+
+            freeCmdLines(command);
+
+            if (i != -1)
+            {
+                // copy the desired command
+                strcpy(line, history[i]);
+                command = parseCmdLines(line);
+
+                if (!command)
+                {
+                    continue;
+                }
+            }
+        }
+
+        // add the command to the history of commands list
+
+        if (oldest == -1)
+        {
+            oldest = 0;
+        }
+
+        newest = (newest + 1) % HISTLEN;
+
+        if (history[newest][0] != '\0')
+        {
+            oldest = (oldest + 1) % HISTLEN;
+        }
+
+        strcpy(history[newest], line);
+
+        if (strcmp(command->arguments[0], "history") == 0)
+        {
+            printHistory(history, oldest, newest);
+
+            freeCmdLines(command);
+        }
+        else if (strcmp(command->arguments[0], "cd") == 0)
         {
             if (chdir(command->arguments[1]) == -1)
             {
@@ -459,7 +570,6 @@ int main(int argc, char **argv)
         }
         else if (strcmp(command->arguments[0], "blast") == 0)
         {
-
             pid1 = atoi(command->arguments[1]);
 
             if (kill(pid1, SIGINT) == -1)

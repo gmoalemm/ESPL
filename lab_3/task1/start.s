@@ -98,7 +98,7 @@ main:
             mov eax, [ecx]          ; eax is not the pointer itself
             add eax, 2              ; move 2 forward to skip "-i"
 
-            push    dword 1411      ; permissions, ignored
+            push    dword 511       ; permissions, ignored
             push    dword 0         ; read access
             push    dword eax       ; path
             push    dword 5         ; open syscall
@@ -132,8 +132,8 @@ main:
             mov eax, [ecx]          ; eax is not the pointer itself
             add eax, 2              ; move 2 forward to skip "-o"
 
-            push    dword 1411      ; permissions, all (777 octal)
-            push    dword 65        ; write/create access
+            push    dword 511       ; permissions, all (777 octal)
+            push    dword 577       ; write/create/trunc access
             push    dword eax       ; path
             push    dword 5         ; open syscall
             call    system_call
