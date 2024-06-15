@@ -32,8 +32,7 @@ typedef struct process
 
 void printHistory(char hist[HISTLEN][MAX_BUF], int oldest, int newest)
 {
-    int i = oldest;
-    int c = 0;
+    int i = oldest, c = 0;
 
     while (i != newest)
     {
@@ -43,47 +42,21 @@ void printHistory(char hist[HISTLEN][MAX_BUF], int oldest, int newest)
 
     if (hist[i])
     {
-        printf("%d\t%s", c++, hist[i]);
+        printf("%d\t%s", c, hist[i]);
     }
 }
 
 /*** lab c - processes manager */
 
-/**
- * @brief Get the process status (RUNNING, SUSPENDED or TERMINATED).
- *
- * @param pid
- * @return int the process status.
- */
 int getProcStatus(pid_t pid)
 {
     int stat;
     pid_t result = waitpid(pid, &stat, WNOHANG);
 
-    if (result == -1)
-    {
-        return TERMINATED;
-    }
-
-    if (result == 0)
-    {
-        return RUNNING;
-    }
-
-    if (result == pid)
-    {
-        if (WIFEXITED(stat) || WIFSIGNALED(stat))
-        {
-            return TERMINATED;
-        }
-
-        if (WIFSTOPPED(stat))
-        {
-            return SUSPENDED;
-        }
-    }
-
-    return TERMINATED;
+    return (result == 0) ? RUNNING : 
+        (result != pid) ?                           TERMINATED :
+        (WIFEXITED(stat) || WIFSIGNALED(stat)) ?    TERMINATED :
+        WIFSTOPPED(stat) ?                          SUSPENDED : TERMINATED;
 }
 
 /**
@@ -141,14 +114,6 @@ void removeTerminatedProcesses(process **process_list)
     }
 }
 
-/**
- * @brief find the process with the given id in the process_list and change
- * its status to the received status.
- *
- * @param process_list list of processes.
- * @param pid process id.
- * @param status new status.
- */
 void updateProcessStatus(process *process_list, int pid, int status)
 {
     process *curr = process_list;
@@ -164,14 +129,9 @@ void updateProcessStatus(process *process_list, int pid, int status)
     }
 }
 
-/**
- * @brief go over the process list, and for each process check if it is done.
- *
- * @param process_list
- */
+// ? should this function remove terminated processes?
 void updateProcessList(process **process_list)
 {
-    // ? should this function remove terminated processes?
     process *curr = *process_list;
 
     while (curr)
@@ -181,11 +141,6 @@ void updateProcessList(process **process_list)
     }
 }
 
-/**
- * @brief free all memory allocated for the process list.
- *
- * @param process_list
- */
 void freeProcessList(process *process_list)
 {
     process *curr = process_list, *next;
@@ -199,13 +154,7 @@ void freeProcessList(process *process_list)
     }
 }
 
-/**
- * @brief inserts a new process to the head of a processes list.
- *
- * @param process_list a list of processes (not NULL).
- * @param cmd
- * @param pid the process id (pid) of the process running the command.
- */
+/// @param pid the process id (pid) of the process running the command.
 void addProcess(process **process_list, cmdLine *cmd, pid_t pid)
 {
     process *proc = (process *)calloc(1, sizeof(process));
@@ -218,15 +167,10 @@ void addProcess(process **process_list, cmdLine *cmd, pid_t pid)
     *process_list = proc;
 }
 
-/**
- * @brief prints a list of processes.
- *
- * @param process_list
- */
 void printProcessList(process **process_list)
 {
     process *curr;
-    int i = 0, j;
+    int i = 0, j = 0;
 
     updateProcessList(process_list);
 
@@ -237,9 +181,9 @@ void printProcessList(process **process_list)
     while (curr)
     {
         printf("%d\t%d\t%s\t%s", i++, curr->pid,
-               curr->status == RUNNING     ? "RUNN"
-               : curr->status == SUSPENDED ? "SUSP"
-                                           : "TERM",
+                    curr->status == RUNNING     ? "RUNN" :
+                    curr->status == SUSPENDED   ? "SUSP"
+                                                : "TERM",
                curr->cmd->arguments[0]);
 
         for (j = 1; j < curr->cmd->argCount; j++)
@@ -257,13 +201,7 @@ void printProcessList(process **process_list)
 
 /*** lab c - pipes */
 
-/**
- * @brief check if a command that uses piping is valid (redirections make sense).
- *
- * @param cmd command to check.
- * @return int TRUE if the piping is valid (or no piping at all),
- * FALSE otherwise.
- */
+/// @brief check if a command that uses piping is valid (redirections make sense).
 int validPiping(cmdLine *cmd)
 {
     return !(cmd->next) || (!(cmd->outputRedirect || cmd->next->inputRedirect));
@@ -295,19 +233,9 @@ int execute(cmdLine *pCmdLine)
 int redirect(const char *file, int oldfd, int debug)
 {
     int filedp;
-    int flags;
+    int flags = (oldfd == STDOUT_FILENO) ? O_WRONLY | O_CREAT : O_RDONLY;
 
-    if (oldfd == STDIN_FILENO)
-    {
-        flags = O_RDONLY;
-    }
-    else if (oldfd == STDOUT_FILENO)
-    {
-        flags = O_WRONLY | O_CREAT;
-    }
-
-    // close the old fd (which should be low) so the new file could take its
-    // place
+    // close the old fd (should be low) so the new file could take its place
     if (close(oldfd) == -1)
     {
         if (debug)
@@ -319,7 +247,6 @@ int redirect(const char *file, int oldfd, int debug)
     }
 
     // try to open and get the fd of the file
-    // ! the mode is ignored when O_CREAT is not specified
     if ((filedp = open(file, flags, S_IRWXU | S_IRGRP | S_IROTH)) == -1)
     {
         if (debug)
@@ -334,8 +261,6 @@ int redirect(const char *file, int oldfd, int debug)
     {
         if (debug)
         {
-            // I use fprintf here because the call actually worked,
-            // just not as expected
             fprintf(stderr, "!> open returned something unexpected.");
         }
 
@@ -357,7 +282,6 @@ int redirect(const char *file, int oldfd, int debug)
  * @brief start a child process to run a command.
  *
  * @param cmd a command to run in a child process.
- * @param rawCommand the actual line written by the user.
  * @param debug indicates if errors should be printed to stderr.
  */
 void runChildProcess(cmdLine *cmd, int debug)
@@ -398,18 +322,56 @@ void runChildProcess(cmdLine *cmd, int debug)
     _exit(1);
 }
 
+/**
+ * @brief check if the current command is a special command for signaling children.
+ * 
+ * @param processes processes list.
+ * @return int TRUE if signaled, FALSE otehrwise.
+ */
+int signalProc(cmdLine *command, int debug, process *processes)
+{
+    pid_t pid;
+
+    // ! sleep works, but the looper still runs, why? is it like that in others' assignments?
+
+    int sig = (!strcmp(command->arguments[0], "alarm")) ? SIGCONT   :
+            (!strcmp(command->arguments[0], "blast"))   ? SIGINT    :
+            (!strcmp(command->arguments[0], "sleep"))   ? SIGTSTP   : -1;
+
+    int newStat = (sig == SIGCONT)  ? RUNNING : 
+                (sig == SIGINT)     ? TERMINATED : SUSPENDED;
+
+    if (sig != -1)
+    {
+        pid = atoi(command->arguments[1]);
+
+        if (kill(pid, sig) == -1)
+        {
+            if (debug)
+            {
+                perror("!> signaling failed");
+            }
+        }
+        else
+        {
+            updateProcessStatus(processes, pid, newStat);
+        }
+
+        freeCmdLines(command);
+
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 int main(int argc, char **argv)
 {
-    char cwd[PATH_MAX] = {0}, line[LINE_MAX] = {0};
+    char cwd[PATH_MAX] = {0}, line[LINE_MAX] = {0}, *tmp = NULL, history[HISTLEN][MAX_BUF];
     cmdLine *command = NULL;
-    int execError = FALSE, debug = FALSE;
-    int i;
-    int p[2];
+    int execError = FALSE, debug = FALSE, i, p[2], newest = -1, oldest = -1;;
     pid_t pid1, pid2;
     process *processes = NULL;
-    char history[HISTLEN][MAX_BUF];
-    int newest = -1, oldest = -1;
-    char *tmp = NULL;
 
     // scan for line arguments
     for (i = 0; i < argc; i++)
@@ -441,9 +403,7 @@ int main(int argc, char **argv)
 
         // parse and execute it
 
-        command = parseCmdLines(line);
-
-        if (!command)
+        if (!(command = parseCmdLines(line)))
         {
             continue;
         }
@@ -499,16 +459,17 @@ int main(int argc, char **argv)
 
             freeCmdLines(command);
 
-            if (i != -1)
+            if (i == -1)
             {
-                // copy the desired command
-                strcpy(line, history[i]);
-                command = parseCmdLines(line);
+                continue;
+            }
 
-                if (!command)
-                {
-                    continue;
-                }
+            // copy the desired command
+            strcpy(line, history[i]);
+
+            if (!(command = parseCmdLines(line)))
+            {
+                continue;
             }
         }
 
@@ -550,62 +511,9 @@ int main(int argc, char **argv)
 
             freeCmdLines(command);
         }
-        else if (strcmp(command->arguments[0], "alarm") == 0)
+        else if (signalProc(command, debug, processes))
         {
-            pid1 = atoi(command->arguments[1]);
-
-            if (kill(pid1, SIGCONT) == -1)
-            {
-                if (debug)
-                {
-                    perror("!> signaling failed");
-                }
-            }
-            else
-            {
-                updateProcessStatus(processes, pid1, RUNNING);
-            }
-
-            freeCmdLines(command);
-        }
-        else if (strcmp(command->arguments[0], "blast") == 0)
-        {
-            pid1 = atoi(command->arguments[1]);
-
-            if (kill(pid1, SIGINT) == -1)
-            {
-                if (debug)
-                {
-                    perror("!> signaling failed");
-                }
-            }
-            else
-            {
-                updateProcessStatus(processes, pid1, TERMINATED);
-            }
-
-            freeCmdLines(command);
-        }
-        // ? why sleep?! it is a name of another command!
-        // ! works, but the looper still runs, why? is it like that in others' assignments?
-        else if (strcmp(command->arguments[0], "sleep") == 0)
-        {
-            pid1 = atoi(command->arguments[1]);
-
-            if (kill(pid1, SIGTSTP) == -1)
-            {
-                if (debug)
-                {
-                    perror("!> signaling failed");
-                }
-            }
-            else
-            {
-                puts("sus");
-                updateProcessStatus(processes, pid1, SUSPENDED);
-            }
-
-            freeCmdLines(command);
+            continue;
         }
         else if (strcmp(command->arguments[0], "procs") == 0)
         {
@@ -613,7 +521,6 @@ int main(int argc, char **argv)
 
             freeCmdLines(command);
         }
-        // ? is this the right spot?
         else if (!validPiping(command))
         {
             if (debug)
