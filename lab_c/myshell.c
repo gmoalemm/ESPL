@@ -13,6 +13,242 @@
 #define FALSE 0
 #define TRUE 1
 
+#define TERMINATED -1
+#define RUNNING 1
+#define SUSPENDED 0
+
+typedef struct process
+{
+    cmdLine *cmd;         /* the parsed command line*/
+    pid_t pid;            /* the process id that is running the command*/
+    int status;           /* status of the process: RUNNING/SUSPENDED/TERMINATED */
+    struct process *next; /* next process in chain */
+} process;
+
+/*** lab c - processes manager */
+
+/**
+ * @brief Get the process status (RUNNING, SUSPENDED or TERMINATED).
+ *
+ * @param pid
+ * @return int the process status.
+ */
+int getProcStatus(pid_t pid)
+{
+    int stat;
+    pid_t result = waitpid(pid, &stat, WNOHANG);
+
+    if (result == -1)
+    {
+        return TERMINATED;
+    }
+
+    if (result == 0)
+    {
+        return RUNNING;
+    }
+
+    if (result == pid)
+    {
+        if (WIFEXITED(stat) || WIFSIGNALED(stat))
+        {
+            return TERMINATED;
+        }
+
+        if (WIFSTOPPED(stat))
+        {
+            return SUSPENDED;
+        }
+    }
+
+    return TERMINATED;
+}
+
+/**
+ * @brief free the cmdLine struct if and only if it is the first in the chain.
+ * That is because we know that if a node is not first in the chain, it will
+ * eventually get freed when the firt command in chain will get freed.
+ * If we'd try to free it before the first, we'll get an error.
+ * @param node 
+ */
+void freeIfFirstInChain(cmdLine *node)
+{
+    if (node && node->idx == 0)
+    {
+        freeCmdLines(node);
+    }
+}
+
+void removeTerminatedProcesses(process **process_list)
+{
+    process *curr = *process_list, *prev = NULL;
+
+    // remove from the head
+    while (curr && (curr->status == TERMINATED))
+    {
+        *process_list = curr->next;
+        freeIfFirstInChain(curr->cmd);
+        free(curr);
+        curr = *process_list;
+    }
+
+    // left with empty list
+    if (!curr)
+    {
+        return;
+    }
+
+    // first is still there, scan the rest
+
+    prev = curr;
+    curr = curr->next;
+
+    while (curr)
+    {
+        if (curr->status == TERMINATED)
+        {
+            prev->next = curr->next;
+            freeIfFirstInChain(curr->cmd);
+            free(curr);
+            curr = prev->next;
+        }
+        else
+        {
+            curr = curr->next;
+        }
+    }
+}
+
+/**
+ * @brief find the process with the given id in the process_list and change
+ * its status to the received status.
+ *
+ * @param process_list list of processes.
+ * @param pid process id.
+ * @param status new status.
+ */
+void updateProcessStatus(process *process_list, int pid, int status)
+{
+    process *curr = process_list;
+
+    while (curr && (curr->pid != pid))
+    {
+        curr = curr->next;
+    }
+
+    if (curr)
+    {
+        curr->status = status;
+    }
+}
+
+/**
+ * @brief go over the process list, and for each process check if it is done.
+ *
+ * @param process_list
+ */
+void updateProcessList(process **process_list)
+{
+    // ? should this function remove terminated processes?
+    process *curr = *process_list;
+
+    while (curr)
+    {
+        curr->status = getProcStatus(curr->pid);
+        curr = curr->next;
+    }
+}
+
+/**
+ * @brief free all memory allocated for the process list.
+ *
+ * @param process_list
+ */
+void freeProcessList(process *process_list)
+{
+    process *curr = process_list, *next;
+
+    while (curr)
+    {
+        next = curr->next;
+        freeIfFirstInChain(curr->cmd);
+        free(curr);
+        curr = next;
+    }
+}
+
+/**
+ * @brief inserts a new process to the head of a processes list.
+ *
+ * @param process_list a list of processes (not NULL).
+ * @param cmd
+ * @param pid the process id (pid) of the process running the command.
+ */
+void addProcess(process **process_list, cmdLine *cmd, pid_t pid)
+{
+    process *proc = (process *)calloc(1, sizeof(process));
+
+    proc->cmd = cmd;
+    proc->pid = pid;
+    proc->status = getProcStatus(pid);
+    proc->next = *process_list;
+
+    *process_list = proc;
+}
+
+/**
+ * @brief prints a list of processes.
+ *
+ * @param process_list
+ */
+void printProcessList(process **process_list)
+{
+    process *curr;
+    int i = 0, j;
+
+    updateProcessList(process_list);
+
+    puts("#\tPID\tSTAT\tCMD");
+
+    curr = *process_list;
+
+    while (curr)
+    {
+        printf("%d\t%d\t%s\t%s", i++, curr->pid,
+               curr->status == RUNNING     ? "RUNN"
+               : curr->status == SUSPENDED ? "SUSP"
+                                           : "TERM",
+               curr->cmd->arguments[0]);
+
+        for (j = 1; j < curr->cmd->argCount; j++)
+        {
+            printf(" %s", curr->cmd->arguments[j]);
+        }
+
+        puts("");
+
+        curr = curr->next;
+    }
+
+    removeTerminatedProcesses(process_list);
+}
+
+/*** lab c - pipes */
+
+/**
+ * @brief check if a command that uses piping is valid (redirections make sense).
+ *
+ * @param cmd command to check.
+ * @return int TRUE if the piping is valid (or no piping at all),
+ * FALSE otherwise.
+ */
+int validPiping(cmdLine *cmd)
+{
+    return !(cmd->next) || (!(cmd->outputRedirect || cmd->next->inputRedirect));
+}
+
+/*** lab 2 - shell */
+
 /**
  * @brief execute a command.
  *
@@ -54,7 +290,7 @@ int redirect(const char *file, int oldfd, int debug)
     {
         if (debug)
         {
-            perror("!> couldn't close file.");
+            perror("!> couldn't close file");
         }
 
         return 1;
@@ -66,7 +302,7 @@ int redirect(const char *file, int oldfd, int debug)
     {
         if (debug)
         {
-            perror("!> couldn't open file.");
+            perror("!> couldn't open file");
         }
 
         return 1;
@@ -85,7 +321,7 @@ int redirect(const char *file, int oldfd, int debug)
         {
             if (debug)
             {
-                perror("!> couldn't close file.");
+                perror("!> couldn't close file");
             }
         }
 
@@ -105,12 +341,13 @@ int redirect(const char *file, int oldfd, int debug)
 void runChildProcess(cmdLine *cmd, int debug)
 {
     int i;
+    pid_t pid = getpid();
 
     if (debug)
     {
-        fprintf(stderr, "!> pid = %d | cmd = %s", getpid(), cmd->arguments[0]);
+        fprintf(stderr, "!> pid = %d | cmd = %s", pid, cmd->arguments[0]);
 
-        for(i = 1; i < cmd->argCount; i++)
+        for (i = 1; i < cmd->argCount; i++)
         {
             fprintf(stderr, " %s", cmd->arguments[i]);
         }
@@ -133,22 +370,10 @@ void runChildProcess(cmdLine *cmd, int debug)
 
     if (debug)
     {
-        perror("!> execution failed.");
+        perror("!> execution failed");
     }
 
     _exit(1);
-}
-
-/**
- * @brief check if a command that uses piping is valid (redirections make sense).
- *
- * @param cmd command to check.
- * @return int TRUE if the piping is valid (or no piping at all),
- * FALSE otherwise.
- */
-int validPiping(cmdLine *cmd)
-{
-    return !(cmd->next) || (!(cmd->outputRedirect || cmd->next->inputRedirect));
 }
 
 int main(int argc, char **argv)
@@ -159,6 +384,7 @@ int main(int argc, char **argv)
     int i;
     int p[2];
     pid_t pid1, pid2;
+    process *processes = NULL;
 
     // scan for line arguments
     for (i = 0; i < argc; i++)
@@ -180,7 +406,6 @@ int main(int argc, char **argv)
 
         if (feof(stdin))
         {
-            freeCmdLines(command);
             break;
         }
 
@@ -188,9 +413,13 @@ int main(int argc, char **argv)
 
         command = parseCmdLines(line);
 
+        if (!command)
+        {
+            continue;
+        }
+
         if (strcmp(command->arguments[0], "quit") == 0)
         {
-            freeCmdLines(command);
             break;
         }
 
@@ -200,27 +429,79 @@ int main(int argc, char **argv)
             {
                 if (debug)
                 {
-                    perror("!> couldn't change directory.");
+                    perror("!> couldn't change directory");
                 }
             }
             else
             {
                 getcwd(cwd, PATH_MAX);
             }
+
+            freeCmdLines(command);
         }
         else if (strcmp(command->arguments[0], "alarm") == 0)
         {
-            if (kill(atoi(command->arguments[1]), SIGCONT) == -1 && debug)
+            pid1 = atoi(command->arguments[1]);
+
+            if (kill(pid1, SIGCONT) == -1)
             {
-                perror("!> signaling failed.");
+                if (debug)
+                {
+                    perror("!> signaling failed");
+                }
             }
+            else
+            {
+                updateProcessStatus(processes, pid1, RUNNING);
+            }
+
+            freeCmdLines(command);
         }
         else if (strcmp(command->arguments[0], "blast") == 0)
         {
-            if (kill(atoi(command->arguments[1]), SIGINT) == -1 && debug)
+
+            pid1 = atoi(command->arguments[1]);
+
+            if (kill(pid1, SIGINT) == -1)
             {
-                perror("!> signaling failed.");
+                if (debug)
+                {
+                    perror("!> signaling failed");
+                }
             }
+            else
+            {
+                updateProcessStatus(processes, pid1, TERMINATED);
+            }
+
+            freeCmdLines(command);
+        }
+        // ? why sleep?! it is a name of another command!
+        // ! works, but the looper still runs, why? is it like that in others' assignments?
+        else if (strcmp(command->arguments[0], "sleep") == 0)
+        {
+            pid1 = atoi(command->arguments[1]);
+
+            if (kill(pid1, SIGTSTP) == -1)
+            {
+                if (debug)
+                {
+                    perror("!> signaling failed");
+                }
+            }
+            else
+            {
+                puts("sus");
+                updateProcessStatus(processes, pid1, SUSPENDED);
+            }
+
+            freeCmdLines(command);
+        }
+        else if (strcmp(command->arguments[0], "procs") == 0)
+        {
+            printProcessList(&processes);
+
+            freeCmdLines(command);
         }
         // ? is this the right spot?
         else if (!validPiping(command))
@@ -229,6 +510,8 @@ int main(int argc, char **argv)
             {
                 fprintf(stderr, "!> invalid piping!\n");
             }
+
+            freeCmdLines(command);
         }
         else if (command->next)
         {
@@ -248,8 +531,10 @@ int main(int argc, char **argv)
             {
                 // parent
 
+                addProcess(&processes, command, pid1);
+
                 close(p[1]);
-                
+
                 if (!(pid2 = fork()))
                 {
                     // child 2
@@ -264,6 +549,8 @@ int main(int argc, char **argv)
                 {
                     // parent again
 
+                    addProcess(&processes, command->next, pid2);
+
                     close(p[0]);
 
                     // ? should i always wait?
@@ -276,6 +563,8 @@ int main(int argc, char **argv)
         {
             if ((pid1 = fork()) > 0)
             {
+                addProcess(&processes, command, pid1);
+
                 if (command->blocking)
                 {
                     waitpid(pid1, NULL, 0);
@@ -283,7 +572,7 @@ int main(int argc, char **argv)
             }
             else if (pid1 < 0)
             {
-                perror("!> fork failed.");
+                perror("!> fork failed");
                 execError = TRUE;
             }
             else
@@ -291,11 +580,10 @@ int main(int argc, char **argv)
                 runChildProcess(command, debug);
             }
         }
-
-        freeCmdLines(command);
-
-        command = NULL;
     } while (!execError);
+
+    freeCmdLines(command);
+    freeProcessList(processes);
 
     return execError;
 }
