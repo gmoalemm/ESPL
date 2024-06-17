@@ -57,7 +57,7 @@ main:
 
     print_next_arg:
         cmp     ebx, 0
-        jz      done_printing_args
+        jz      encode_file
 
         ; calculate the current arg's length
         push    dword ecx  
@@ -71,7 +71,7 @@ main:
         ; print the string
         push    dword eax     ; length
         push    dword [ecx]   ; pointer
-        push    dword 1       ; stdout
+        push    dword [stdout]  
         push    dword 4       ; print syscall
         call    system_call
         add     esp, 16
@@ -162,7 +162,7 @@ main:
         add     esp, 16
         call    print_new_line
 
-    done_printing_args:
+    encode_file:
         ; read a char from the input file
         push    dword 1           
         push    dword buffer         
@@ -171,11 +171,18 @@ main:
         call    system_call
         add     esp, 16
 
+        ; if not read, finish
+        cmp     eax, 1
+        jne     finish
+
         push    dword [buffer]
         call    encode_char
         add     esp, 4
 
-    call print_new_line
+        jmp encode_file
+
+    finish:
+        call print_new_line
 
     close_files:
         push    dword [infile]
@@ -204,8 +211,8 @@ encode_char:
     cmp     [ebp + 8], dword 'A'
     js      print_encoded           ; eax < 'A'
 
-    cmp     [ebp + 8], dword 'Z'
-    ja      print_encoded           ; 'Z' < eax
+    cmp     [ebp + 8], dword 'z'
+    ja      print_encoded           ; 'z' < eax
 
     inc     dword [ebp + 8] 
 
@@ -230,7 +237,7 @@ print_new_line:
     push    ebp
     mov     ebp, esp
 
-    push    dword 2           
+    push    dword 1          
     push    dword linefeed           
     push    dword [stdout]   
     push    dword 4   
