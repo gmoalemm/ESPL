@@ -9,8 +9,8 @@
 #define SHIRA_OFFSET 0x291
 
 extern int system_call();
-extern int infection();
-extern int infector();
+extern void infection();
+extern void infector();
 
 int main(int argc, char *argv[], char *envp[])
 {
