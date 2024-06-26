@@ -51,10 +51,11 @@ void printHistory(char hist[HISTLEN][MAX_BUF], int oldest, int newest)
 int getProcStatus(pid_t pid)
 {
     int stat;
-    pid_t result = waitpid(pid, &stat, WNOHANG);
+
+    // WUNTRACED "also return if a child has stopped" (man)
+    pid_t result = waitpid(pid, &stat, WNOHANG | WUNTRACED);
 
     return (result == 0) ? RUNNING : 
-        (result != pid) ?                           TERMINATED :
         (WIFEXITED(stat) || WIFSIGNALED(stat)) ?    TERMINATED :
         WIFSTOPPED(stat) ?                          SUSPENDED : TERMINATED;
 }
