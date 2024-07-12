@@ -135,6 +135,7 @@ infector:
     je      infector_error
 
     popad
+
     add     esp, 4
     pop     ebp
     ret
