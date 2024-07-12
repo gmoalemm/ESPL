@@ -56,6 +56,12 @@ sectionType sectionTypes[] = {
     {"NUM", SHT_NUM}
 };
 
+// Section indices, more may be added later
+sectionType sectionIndices[] = {
+    {"UND", SHN_UNDEF},
+    {"ABS", SHN_ABS}
+};
+
 void toggleDebug();
 void examineELF();
 void printSections();
@@ -69,6 +75,7 @@ void printELFHeader(Elf32_Ehdr*);
 void addFile(char*, int, off_t, void*);
 void freeFile(elfFile*);
 void printSectionTypeName(int);
+void printSectionIndexName(int);
 
 int main(int argc, char *argv[])
 {
@@ -113,11 +120,11 @@ void toggleDebug()
 
     if (debug)
     {
-        puts("Debug flag now on");
+        puts("Debug flag now on\n");
     }
     else
     {
-        puts("Debug flag now off");
+        puts("Debug flag now off\n");
     }
 }
 
@@ -209,8 +216,8 @@ void printSections()
 {
     elfFile *current = openFiles;
     Elf32_Ehdr *header = NULL;
-    Elf32_Shdr *sectionHeaderTable = NULL, *stringTableSection = NULL, *section = NULL;
-    char *stringTable = NULL;
+    Elf32_Shdr *sectionHeaders = NULL, *sectionHeaderStrTable = NULL;
+    char *sectionsNames = NULL;
     int i = 0;
 
     if (current == NULL)
@@ -225,13 +232,13 @@ void printSections()
 
         header = (Elf32_Ehdr *)current->mapStart;
 
-        sectionHeaderTable = (Elf32_Shdr *)(current->mapStart + header->e_shoff);
+        sectionHeaders = (Elf32_Shdr *)(current->mapStart + header->e_shoff);
 
-        // Select the string table section
-        stringTableSection = &sectionHeaderTable[header->e_shstrndx];   
+        // Select the string table of the section headers
+        sectionHeaderStrTable = &sectionHeaders[header->e_shstrndx];   
 
         // This is the actual string table
-        stringTable = (char *)(current->mapStart + stringTableSection->sh_offset);
+        sectionsNames = (char *)(current->mapStart + sectionHeaderStrTable->sh_offset);
 
         if (debug)
         {
@@ -240,21 +247,19 @@ void printSections()
 
         for (i = 0; i < header->e_shnum; i++)
         {
-            section = &sectionHeaderTable[i];
-
             if (debug)
             {
-                printf("  (name offset = %d)\t", section->sh_name);
+                printf("  (name offset = %d)\t", sectionHeaders[i].sh_name);
             }
 
             // %-18s is used to left-align the string with a width of 18 (same as readelf -S does on my computer)
             printf("  [%2d]\t%-18s\t%08x\t%06x\t%06x\t", i, 
-                stringTable + section->sh_name, 
-                section->sh_addr, 
-                section->sh_offset, 
-                section->sh_size);
+                sectionsNames + sectionHeaders[i].sh_name, 
+                sectionHeaders[i].sh_addr, 
+                sectionHeaders[i].sh_offset, 
+                sectionHeaders[i].sh_size);
 
-            printSectionTypeName(section->sh_type);
+            printSectionTypeName(sectionHeaders[i].sh_type);
 
             printf("\n");
         }
@@ -267,7 +272,84 @@ void printSections()
 
 void printSymbols()
 {
-    puts("not implemented yet"); 
+    elfFile *current = openFiles;
+
+    Elf32_Ehdr *header = NULL;
+    Elf32_Shdr *sectionHeaders = NULL, *sectionHeaderStrTable = NULL;
+    Elf32_Shdr *symbolTable = NULL, *stringTable = NULL;   
+    Elf32_Sym *symbols = NULL;  // actual symbols entries
+    char *sectionsNames = NULL, *stringTableData = NULL;
+    int i = 0, j = 0, entries = -1;
+
+    while (current != NULL)
+    {
+        header = (Elf32_Ehdr*) current->mapStart;
+
+        sectionHeaders = (Elf32_Shdr*) (current->mapStart + header->e_shoff);
+
+        sectionHeaderStrTable = &sectionHeaders[header->e_shstrndx];
+        sectionsNames = (char*) (current->mapStart + sectionHeaderStrTable->sh_offset);
+
+        for (i = 0; i < header->e_shnum; i++)
+        {
+            // ? should we check for SHT_DYNSYM as well?
+            if (sectionHeaders[i].sh_type == SHT_SYMTAB)
+            {
+                symbolTable = &sectionHeaders[i];
+            }
+            // We do not want the section header string table, we want the string table for the symbols!
+            else if (sectionHeaders[i].sh_type == SHT_STRTAB && i != header->e_shstrndx)
+            {
+                stringTable = &sectionHeaders[i];
+            }
+        }
+
+        if (symbolTable == NULL || stringTable == NULL)
+        {
+            puts("   No symbol table or string table found!");
+            current = current->next;
+            continue;
+        }
+
+        symbols = (Elf32_Sym*) (current->mapStart + symbolTable->sh_offset);
+
+        stringTableData = (char*) (current->mapStart + stringTable->sh_offset);
+
+        printf("\nFile %s\n", current->fileName);
+
+        entries = symbolTable->sh_size / sizeof(Elf32_Sym);
+
+        if (debug)
+        {
+            printf("   (Symbol table '%s' contains %d entries and its size is %d bytes)\n", 
+                sectionsNames + symbolTable->sh_name, entries, symbolTable->sh_size);
+        }
+
+        for (j = 0; j < entries; j++)
+        {
+            printf("   %3d %08x  ", j, symbols[j].st_value);  // index and value
+
+            printSectionIndexName(symbols[j].st_shndx);
+
+            // If the section index is less than the number of section headers, 
+            // we can print the section name
+            if (symbols[j].st_shndx < header->e_shnum)
+            {
+                printf(" %-18s ", sectionsNames + sectionHeaders[symbols[j].st_shndx].sh_name);
+            }
+            else
+            {
+                printf(" %-18s ", "");
+            }
+
+            // Print the symbol name
+            printf("%s\n", &stringTableData[symbols[j].st_name]);
+        }
+
+        printf("\n");
+
+        current = current->next;
+    }
 }
 
 void checkForMerge()
@@ -369,4 +451,20 @@ void printSectionTypeName(int type)
     }
 
     printf("%08x", type);
+}
+
+void printSectionIndexName(int index)
+{
+    int i = 0, arraySize = sizeof(sectionIndices) / sizeof(sectionType);
+
+    for (i = 0; i < arraySize; i++)
+    {
+        if (sectionIndices[i].type == index)
+        {
+            printf("%-3s", sectionIndices[i].name);
+            return;
+        }
+    }
+
+    printf("%3d", index);
 }
