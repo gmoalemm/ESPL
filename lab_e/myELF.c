@@ -24,8 +24,37 @@ typedef struct elfFile
     struct elfFile *next;
 } elfFile;
 
+typedef struct sectionType
+{
+    char *name;
+    int type;
+} sectionType;
+
 bool debug = false;
+
 elfFile *openFiles = NULL;
+
+// Section types, more may be added later
+sectionType sectionTypes[] = {
+    {"NULL", SHT_NULL},
+    {"PROGBITS", SHT_PROGBITS},
+    {"SYMTAB", SHT_SYMTAB},
+    {"STRTAB", SHT_STRTAB},
+    {"RELA", SHT_RELA},
+    {"HASH", SHT_HASH},
+    {"DYNAMIC", SHT_DYNAMIC},
+    {"NOTE", SHT_NOTE},
+    {"NOBITS", SHT_NOBITS},
+    {"REL", SHT_REL},
+    {"SHLIB", SHT_SHLIB},
+    {"DYNSYM", SHT_DYNSYM},
+    {"INIT_ARRAY", SHT_INIT_ARRAY},
+    {"FINI_ARRAY", SHT_FINI_ARRAY},
+    {"PREINIT_ARRAY", SHT_PREINIT_ARRAY},
+    {"GROUP", SHT_GROUP},
+    {"SYMTAB_SHNDX", SHT_SYMTAB_SHNDX},
+    {"NUM", SHT_NUM}
+};
 
 void toggleDebug();
 void examineELF();
@@ -39,6 +68,7 @@ void printMenu(const menuItem*, const int);
 void printELFHeader(Elf32_Ehdr*);
 void addFile(char*, int, off_t, void*);
 void freeFile(elfFile*);
+void printSectionTypeName(int);
 
 int main(int argc, char *argv[])
 {
@@ -114,7 +144,7 @@ void examineELF()
 
     while (currentFileName != NULL)
     {
-        printf("\nExamining: %s\n", currentFileName);
+        printf("\nFile %s\n", currentFileName);
 
         fd = open(currentFileName, O_RDONLY);
 
@@ -177,7 +207,62 @@ void examineELF()
 
 void printSections()
 {
-    puts("not implemented yet"); 
+    elfFile *current = openFiles;
+    Elf32_Ehdr *header = NULL;
+    Elf32_Shdr *sectionHeaderTable = NULL, *stringTableSection = NULL, *section = NULL;
+    char *stringTable = NULL;
+    int i = 0;
+
+    if (current == NULL)
+    {
+        puts("No files are open");
+        return;
+    }
+
+    while (current != NULL)
+    {
+        printf("\nFile %s\n", current->fileName);
+
+        header = (Elf32_Ehdr *)current->mapStart;
+
+        sectionHeaderTable = (Elf32_Shdr *)(current->mapStart + header->e_shoff);
+
+        // Select the string table section
+        stringTableSection = &sectionHeaderTable[header->e_shstrndx];   
+
+        // This is the actual string table
+        stringTable = (char *)(current->mapStart + stringTableSection->sh_offset);
+
+        if (debug)
+        {
+            printf("  (shstrndx = %d)\n", header->e_shstrndx);
+        }
+
+        for (i = 0; i < header->e_shnum; i++)
+        {
+            section = &sectionHeaderTable[i];
+
+            if (debug)
+            {
+                printf("  (name offset = %d)\t", section->sh_name);
+            }
+
+            // %-18s is used to left-align the string with a width of 18 (same as readelf -S does on my computer)
+            printf("  [%2d]\t%-18s\t%08x\t%06x\t%06x\t", i, 
+                stringTable + section->sh_name, 
+                section->sh_addr, 
+                section->sh_offset, 
+                section->sh_size);
+
+            printSectionTypeName(section->sh_type);
+
+            printf("\n");
+        }
+
+        printf("\n");
+
+        current = current->next;
+    }
 }
 
 void printSymbols()
@@ -227,23 +312,23 @@ void printELFHeader(Elf32_Ehdr *header)
 {
     puts("ELF Header:");
 
-    printf("\tMagic:\t\t\t\t%c%c%c\n", header->e_ident[EI_MAG1],
+    printf("  Magic:\t\t\t%c%c%c\n", header->e_ident[EI_MAG1],
            header->e_ident[EI_MAG2],
            header->e_ident[EI_MAG3]);
 
-    printf("\tData:\t\t\t\t%s\n", header->e_ident[EI_DATA] == ELFDATANONE ? 
+    printf("  Data:\t\t\t\t%s\n", header->e_ident[EI_DATA] == ELFDATANONE ? 
         "Invalid data encoding" : header->e_ident[EI_DATA] == ELFDATA2LSB ? 
         "2's complement, little endian" : "2's complement, big endian");
 
-    printf("\tEntry point address:\t\t0x%x\n", header->e_entry);
+    printf("  Entry point address:\t\t0x%x\n", header->e_entry);
 
-    printf("\tStart of section headers:\t%d (bytes into file)\n", header->e_shoff);
-    printf("\tNumber of section headers:\t%d\n", header->e_shnum);
-    printf("\tSize of section headers:\t%d (bytes)\n", header->e_shentsize);
+    printf("  Start of section headers:\t%d (bytes into file)\n", header->e_shoff);
+    printf("  Number of section headers:\t%d\n", header->e_shnum);
+    printf("  Size of section headers:\t%d (bytes)\n", header->e_shentsize);
 
-    printf("\tStart of program headers:\t%d (bytes into file)\n", header->e_phoff);
-    printf("\tNumber of program headers:\t%d\n", header->e_phnum);
-    printf("\tSize of program headers:\t%d (bytes)\n", header->e_phentsize);
+    printf("  Start of program headers:\t%d (bytes into file)\n", header->e_phoff);
+    printf("  Number of program headers:\t%d\n", header->e_phnum);
+    printf("  Size of program headers:\t%d (bytes)\n", header->e_phentsize);
 }
 
 void addFile(char *fileName, int fd, off_t fileSize, void *mapStart)
@@ -268,4 +353,20 @@ void freeFile(elfFile* file)
     close(file->fd);
     free(file->fileName);
     free(file);
+}
+
+void printSectionTypeName(int type)
+{
+    int i = 0, arraySize = sizeof(sectionTypes) / sizeof(sectionType);
+
+    for (i = 0; i < arraySize; i++)
+    {
+        if (sectionTypes[i].type == type)
+        {
+            printf("%s", sectionTypes[i].name);
+            return;
+        }
+    }
+
+    printf("%08x", type);
 }
