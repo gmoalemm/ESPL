@@ -33,6 +33,7 @@ typedef struct sectionType
 bool debug = false;
 
 elfFile *openFiles = NULL;
+int openFilesCount = 0;
 
 // Section types, more may be added later
 sectionType sectionTypes[] = {
@@ -76,6 +77,8 @@ void addFile(char*, int, off_t, void*);
 void freeFile(elfFile*);
 void printSectionTypeName(int);
 void printSectionIndexName(int);
+bool isSymbolDefined(elfFile*, char*);
+int symbolDefinitionCount(char*);
 
 int main(int argc, char *argv[])
 {
@@ -104,7 +107,7 @@ int main(int argc, char *argv[])
 
         if (menuChoice < 0 || menuChoice >= menuSize)
         {
-            puts("Invalid choice!");
+            puts("Invalid choice!\n");
             continue;
         }
 
@@ -325,6 +328,8 @@ void printSymbols()
                 sectionsNames + symbolTable->sh_name, entries, symbolTable->sh_size);
         }
 
+        // Iterate the symbols
+
         for (j = 0; j < entries; j++)
         {
             printf("   %3d %08x  ", j, symbols[j].st_value);  // index and value
@@ -354,7 +359,94 @@ void printSymbols()
 
 void checkForMerge()
 {
-    puts("not implemented yet"); 
+    elfFile *current = openFiles;
+    Elf32_Ehdr *header = NULL;
+    Elf32_Shdr *sectionHeaders = NULL, *symbolTable = NULL, *stringTable = NULL;
+    Elf32_Sym *symbols = NULL;
+    int i = 0, cnt = 0, entries = 0;
+    char *stringTableData = NULL, *sym = NULL;
+
+    if (openFilesCount < 2)
+    {
+        puts("Not enough files are open\n");
+        return;
+    }
+
+    // Check if each file has exactly one symbol table
+
+    while (current != NULL)
+    {
+        cnt = 0;
+        header = (Elf32_Ehdr *)current->mapStart;
+        sectionHeaders = (Elf32_Shdr *)(current->mapStart + header->e_shoff);
+
+        for (i = 0; i < header->e_shnum; i++)
+        {
+            if (sectionHeaders[i].sh_type == SHT_SYMTAB)
+            {
+                cnt++;
+            }
+        }
+
+        if (cnt != 1)
+        {
+            puts("Feature not supported\n");
+            return;
+        }
+
+        current = current->next;
+    }
+
+    current = openFiles;
+
+    // Check if each symbol is defined in all files exactly once
+
+    while (current != NULL)
+    {
+        header = (Elf32_Ehdr *)current->mapStart;
+        sectionHeaders = (Elf32_Shdr *)(current->mapStart + header->e_shoff);
+
+        for (i = 0; i < header->e_shnum; i++)
+        {
+            if (sectionHeaders[i].sh_type == SHT_SYMTAB)
+            {
+                symbolTable = &sectionHeaders[i];
+            }
+            else if (sectionHeaders[i].sh_type == SHT_STRTAB && i != header->e_shstrndx)
+            {
+                stringTable = &sectionHeaders[i];
+            }
+        }
+
+        symbols = (Elf32_Sym*) (current->mapStart + symbolTable->sh_offset);
+
+        stringTableData = (char*) (current->mapStart + stringTable->sh_offset);
+
+        entries = symbolTable->sh_size / sizeof(Elf32_Sym);
+
+        for (i = 1; i < entries; i++)
+        {
+            sym = &stringTableData[symbols[i].st_name];
+
+            if (strcmp(sym, "") == 0)
+            {
+                continue;
+            }
+
+            if (symbolDefinitionCount(sym) == 0)
+            {
+                printf("Symbol '%s' is undefined\n", sym);
+            }
+            else if (symbolDefinitionCount(sym) > 1)
+            {
+                printf("Symbol '%s' is defined multiple times\n", sym);
+            }
+        }
+
+        current = current->next;
+    }
+
+    printf("\n");
 }
 
 void merge()
@@ -427,6 +519,7 @@ void addFile(char *fileName, int fd, off_t fileSize, void *mapStart)
     strcpy(file->fileName, fileName);
 
     openFiles = file;
+    openFilesCount++;
 }
 
 void freeFile(elfFile* file)
@@ -467,4 +560,60 @@ void printSectionIndexName(int index)
     }
 
     printf("%3d", index);
+}
+
+bool isSymbolDefined(elfFile *file, char *sym)
+{
+    Elf32_Ehdr *header = (Elf32_Ehdr *)file->mapStart;
+    Elf32_Shdr *sectionHeaders = (Elf32_Shdr *)(file->mapStart + header->e_shoff);
+    Elf32_Shdr *symbolTable = NULL, *stringTable = NULL;
+    Elf32_Sym *symbols = NULL;
+    char *stringTableData = NULL;
+    int i = 0, entries = -1;
+
+    for (i = 0; i < header->e_shnum; i++)
+    {
+        if (sectionHeaders[i].sh_type == SHT_SYMTAB)
+        {
+            symbolTable = &sectionHeaders[i];
+        }
+        else if (sectionHeaders[i].sh_type == SHT_STRTAB && i != header->e_shstrndx)
+        {
+            stringTable = &sectionHeaders[i];
+        }
+    }
+
+    symbols = (Elf32_Sym *)(file->mapStart + symbolTable->sh_offset);
+    stringTableData = (char *)(file->mapStart + stringTable->sh_offset);
+
+    entries = symbolTable->sh_size / sizeof(Elf32_Sym);
+
+    for (i = 1; i < entries; i++)
+    {
+        if (strcmp(&stringTableData[symbols[i].st_name], sym) == 0 && symbols[i].st_shndx != SHN_UNDEF)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+int symbolDefinitionCount(char *sym)
+{
+    int count = 0;
+
+    elfFile *current = openFiles;
+
+    while (current != NULL)
+    {
+        if (isSymbolDefined(current, sym))
+        {
+            count++;
+        }
+
+        current = current->next;
+    }
+
+    return count;
 }
